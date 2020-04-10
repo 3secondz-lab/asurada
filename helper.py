@@ -3,9 +3,8 @@ from scipy import signal
 import pandas as pd
 
 class DataHelper(object):
-    def __init__(self, lat=None, lon=None, localX=None, localY=None, speed=None, heading=None):
+    def __init__(self, timestamp=None, lat=None, lon=None, localX=None, localY=None, speed=None, heading=None):
         self.origin = np.array([None,None])
-
         if not (lat is None or lon is None):
             self.set_lat(lat)
             self.set_lon(lon)
@@ -19,6 +18,9 @@ class DataHelper(object):
 
         if not heading is None:
             self.set_heading(heading)
+
+        if not timestamp is None:
+            self.set_timestamp(timestamp)
 
     def set_lat(self, lat):
         self.lat = self.assign_checker(lat)
@@ -34,9 +36,14 @@ class DataHelper(object):
             self.localY = self.assign_checker(localY)
         else:
             self.localX, self.localY = self.geo_to_lin(self.lat, self.lon, self.origin)
-
+        self.distance, self.curvature = self.station_curvature(self.localX, self.localY)
+        
     def set_speed(self, speed):
         self.speed = self.assign_checker(speed)
+
+    def set_timestamp(self, timestamp):
+        self.timestamp = timestamp
+        self.interval = np.diff(timestamp)
 
     def set_heading(self, heading):
         self.heading = self.assign_checker(heading)
@@ -45,6 +52,9 @@ class DataHelper(object):
     
     def set_preview_distance(self, preview_distance):
         self.preview_distance = preview_distance
+
+    def set_preview_time(self, preview_time):
+        self.preview_time = preview_time
 
     def get_index(self, localX, localY):
         if hasattr(localX, '__len__') or hasattr(localY, '__len__'):
@@ -60,14 +70,31 @@ class DataHelper(object):
         else:
             return self.localX, self.localY
 
+    def get_preview_window(self, ind, method = 'DISTANCE'):
+        if method is 'DISTANCE':
+            if not hasattr(self, 'preview_distance'):
+                print('class DataHelper -> set preview distance first : DataHelper.set_preview_distance(distance)')
+                raise ValueError
+            window = list(range(ind, self.nearest(self.distance[ind], self.distance[ind]+self.preview_distance)))
+            if len(window) < 2:
+                window = list(range(ind,ind+1))
+            return window
+        elif method is 'TIME':
+            if not hasattr(self, 'preview_time'):
+                print('class DataHelper -> set preview time first : DataHelper.set_preview_time(time)')
+                raise ValueError
+            window = list(range(ind, self.nearest(self.time[ind], self.time[ind]+self.preview_time)))
+            if len(window) < 2:
+                window = list(range(ind, ind+1))
+        else:
+            print('class DataHelper -> Supported preview methods : {DISTANCE, TIME}')
+            raise ValueError
+        
+
     def get_preview_plane(self, ind):
         #TODO : Condition Check
         window = list(range(ind, ind+self.preview_distance))
         return self.transform_plane(self.localX[window]-self.localX[ind], self.localY[window]-self.localY[ind], self.heading[ind])
-
-    def get_preview_curve(self, ind):
-        window = list(range(ind, ind+self.preview_distance))
-        return self.station_curvature(self.localX[window], self.localY[window])
 
 
     @staticmethod
@@ -93,9 +120,9 @@ class DataHelper(object):
 
 
     @staticmethod
-    def nearest(ind, localX, localY):
-        #TODO
-        pass
+    def nearest(origin, dist):
+        idx = np.abs(origin - dist).argmin()
+        return idx
 
     @staticmethod
     def geo_to_lin(lat, lon, origin):
