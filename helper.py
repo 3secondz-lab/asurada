@@ -3,10 +3,14 @@ from scipy import signal
 import pandas as pd
 
 class DataHelper(object):
-    def __init__(self, dataframe=None, timestamp=None, lat=None, lon=None, localX=None, localY=None, speed=None, heading=None):
+    def __init__(self, dataframe=None, timestamp=None, lat=None, lon=None,
+                localX=None, localY=None, speed=None, heading=None, medfilt=15):
         self.origin = np.array([None,None])
 
         if not dataframe is None:
+            assert sum([0 if x in dataframe.columns else 1 for x in
+            ['TimeStamp', 'PosLat', 'PosLon', 'PosLocalX', 'PosLocalY', 'GPS_Speed', 'AngleTrack']]) == 0, 'DataFrame Format MisMatch'
+
             self.df = dataframe
             timestamp = dataframe['TimeStamp'].values
             lat = dataframe['PosLat'].values
@@ -50,8 +54,8 @@ class DataHelper(object):
             self.localY = self.assign_checker(localY)
         else:
             self.localX, self.localY = self.geo_to_lin(self.lat, self.lon, self.origin)
-        self.distance, self.curvature = self.station_curvature(self.localX, self.localY)
-        
+        self.distance, self.curvature = self.station_curvature(self.localX, self.localY, medfilt)
+
     def set_speed(self, speed):
         self.speed = self.assign_checker(speed)
 
@@ -63,7 +67,7 @@ class DataHelper(object):
         self.heading = self.assign_checker(heading)
         if np.max(heading) > 2*np.pi:
             self.heading = np.deg2rad(self.heading)
-    
+
     def set_preview_distance(self, preview_distance):
         self.preview_distance = preview_distance
 
@@ -104,7 +108,7 @@ class DataHelper(object):
         else:
             print('class DataHelper -> Supported preview methods : {DISTANCE, TIME}')
             raise ValueError
-        
+
         res = {}
         if hasattr(self, 'df'):
             for item in self.df.columns:
@@ -112,7 +116,7 @@ class DataHelper(object):
             res['PreviewX'], res['PreviewY'] = self.get_preview_plane(window)
             res['Curvature'] = self.curvature[window]
             res['Distance'] = self.distance[window] - self.distance[ind]
-            
+
             #### TODO ####
             '''
             define output when data input is not in the form of pandas.dataframe
@@ -138,7 +142,7 @@ class DataHelper(object):
 
         return res
 
-    
+
     @staticmethod
     def transform_plane(localX, localY, heading):
 
@@ -167,7 +171,7 @@ class DataHelper(object):
         localX = _Ra * np.cos(origin[0]*_RAD_DEGREE) * delta_lon * np.pi/180.0
         localY = _Rn * delta_lat * np.pi/180.0
 
-        return localX , localY 
+        return localX , localY
 
     @staticmethod
     def lin_to_geo(localX, localY, origin):
@@ -187,7 +191,7 @@ class DataHelper(object):
         return lon , lat
 
     @staticmethod
-    def station_curvature(localX, localY):
+    def station_curvature(localX, localY, medfilt):
         x = localX
         y = localY
         dx = np.append([0], np.diff(x))
@@ -215,7 +219,8 @@ class DataHelper(object):
         k = np.array(k)
         k[k>0.5] = 0.5
         k[k<-0.5] = -0.5
-        k = signal.medfilt(k, 9)
+        # k = signal.medfilt(k, 9)
+        k = signal.medfilt(k, medfilt)
 
         return np.cumsum(s), k
 
@@ -245,3 +250,64 @@ class DataHelper(object):
                 val = np.mean(a[i-front:i+back+1])
             ret[i] = val
         return ret
+
+if __name__ == "__main__":
+    ''' DataHelper Example Code (datafile: std_xxx.csv) '''
+
+    import pdb
+    import numpy as np
+    import pandas as pd
+    import matplotlib.pyplot as plt
+
+    datafile = 'std_001.csv'
+    df = pd.read_csv(datafile)
+
+    dh = DataHelper(df)
+    print('List of local variables of DataHelper:\n', sorted([*vars(dh).keys()]))
+    print(' ')
+
+    dh.set_preview_time(1)
+    ind = 1
+    res = dh.get_preview(ind, method='TIME')  # df fields + [PreviewX, PreviewY, Curvature, Distance]
+    print('Preview information field list:\n', sorted([*res.keys()]))
+
+    ''' Time based preview '''
+    dh.set_preview_time(10.0)
+    ind = 1000  # Index at which preview function is executed
+    res = dh.get_preview(ind, method='TIME')
+
+    fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(20, 6))
+    ax1.plot(res['PosLocalX'], res['PosLocalY'])
+    ax2.plot(res['TimeStamp'],res['Curvature'])
+    ax3.plot(res['TimeStamp'],res['GPS_Speed'])
+
+    ax1.set_xlabel('PosLocalX')
+    ax1.set_ylabel('PosLocalY')
+    ax2.set_xlabel('TimeStamp')
+    ax2.set_ylabel('curvature')
+    ax3.set_xlabel('TimeStamp')
+    ax3.set_ylabel('GPS_Speed')
+
+    fig.suptitle('Time based preview [{}s]'.format(dh.preview_time))
+
+
+    ''' Distance based preview '''
+    dh.set_preview_distance(250.0) # 250m preview
+    ind = 1000 # Index at which preview function is executed
+    res = dh.get_preview(ind, method='DISTANCE')
+
+    fig2, (ax21, ax22, ax23) = plt.subplots(1, 3, figsize=(20, 6))
+    ax21.plot(res['PosLocalX'], res['PosLocalY'])
+    ax22.plot(res['TimeStamp'],res['Curvature'])
+    ax23.plot(res['TimeStamp'],res['GPS_Speed'])
+
+    ax21.set_xlabel('PosLocalX')
+    ax21.set_ylabel('PosLocalY')
+    ax22.set_xlabel('TimeStamp')
+    ax22.set_ylabel('curvature')
+    ax23.set_xlabel('TimeStamp')
+    ax23.set_ylabel('GPS_Speed')
+
+    fig2.suptitle('Distance based preview [{}m]'.format(dh.preview_distance))
+
+    plt.show()
