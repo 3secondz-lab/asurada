@@ -7,6 +7,8 @@ class DataHelper(object):
                 localX=None, localY=None, speed=None, heading=None, medfilt=15):
         self.origin = np.array([None,None])
 
+        self.medfilt = medfilt
+
         if not dataframe is None:
             assert sum([0 if x in dataframe.columns else 1 for x in
             ['TimeStamp', 'PosLat', 'PosLon', 'PosLocalX', 'PosLocalY', 'GPS_Speed', 'AngleTrack']]) == 0, 'DataFrame Format MisMatch'
@@ -54,7 +56,7 @@ class DataHelper(object):
             self.localY = self.assign_checker(localY)
         else:
             self.localX, self.localY = self.geo_to_lin(self.lat, self.lon, self.origin)
-        self.distance, self.curvature = self.station_curvature(self.localX, self.localY, medfilt)
+        self.distance, self.curvature = self.station_curvature(self.localX, self.localY, self.medfilt)
 
     def set_speed(self, speed):
         self.speed = self.assign_checker(speed)
