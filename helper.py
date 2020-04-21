@@ -3,22 +3,42 @@ from scipy import signal
 import pandas as pd
 
 class DataHelper(object):
-    def __init__(self, lat=None, lon=None, localX=None, localY=None, speed=None, heading=None):
+    def __init__(self, dataframe=None, timestamp=None, lat=None, lon=None,
+                localX=None, localY=None, speed=None, heading=None, medfilt=15):
         self.origin = np.array([None,None])
 
-        if not (lat is None or lon is None):
-            self.set_lat(lat)
-            self.set_lon(lon)
-            self.set_position()
+        if not dataframe is None:
+            assert sum([0 if x in dataframe.columns else 1 for x in
+            ['TimeStamp', 'PosLat', 'PosLon', 'PosLocalX', 'PosLocalY', 'GPS_Speed', 'AngleTrack']]) == 0, 'DataFrame Format MisMatch'
 
-        if not (localX is None or localY is None):
+            self.df = dataframe
+            timestamp = dataframe['TimeStamp'].values
+            lat = dataframe['PosLat'].values
+            lon = dataframe['PosLon'].values
+            localX = dataframe['PosLocalX'].values
+            localY = dataframe['PosLocalY'].values
+            speed = dataframe['GPS_Speed'].values
+            heading = dataframe['AngleTrack'].values
+
             self.set_position(localX, localY)
+
+        elif not hasattr(self, 'localX') or not hasattr(self, 'localY'):
+            if not (localX is None or localY is None):
+                self.set_position(localX, localY)
+
+            elif not (lat is None or lon is None):
+                self.set_lat(lat)
+                self.set_lon(lon)
+                self.set_position()
 
         if not speed is None:
             self.set_speed(speed)
 
         if not heading is None:
             self.set_heading(heading)
+
+        if not timestamp is None:
+            self.set_timestamp(timestamp)
 
     def set_lat(self, lat):
         self.lat = self.assign_checker(lat)
@@ -29,22 +49,30 @@ class DataHelper(object):
         self.origin[1] = lon[0]
 
     def set_position(self, localX=None, localY=None):
-        if localX and localY:
+        if not localX is None and not localY is None:
             self.localX = self.assign_checker(localX)
             self.localY = self.assign_checker(localY)
         else:
             self.localX, self.localY = self.geo_to_lin(self.lat, self.lon, self.origin)
+        self.distance, self.curvature = self.station_curvature(self.localX, self.localY, medfilt)
 
     def set_speed(self, speed):
         self.speed = self.assign_checker(speed)
+
+    def set_timestamp(self, timestamp):
+        self.timestamp = timestamp
+        self.interval = np.diff(timestamp)
 
     def set_heading(self, heading):
         self.heading = self.assign_checker(heading)
         if np.max(heading) > 2*np.pi:
             self.heading = np.deg2rad(self.heading)
-    
+
     def set_preview_distance(self, preview_distance):
         self.preview_distance = preview_distance
+
+    def set_preview_time(self, preview_time):
+        self.preview_time = preview_time
 
     def get_index(self, localX, localY):
         if hasattr(localX, '__len__') or hasattr(localY, '__len__'):
@@ -60,14 +88,47 @@ class DataHelper(object):
         else:
             return self.localX, self.localY
 
-    def get_preview_plane(self, ind):
-        #TODO : Condition Check
-        window = list(range(ind, ind+self.preview_distance))
-        return self.transform_plane(self.localX[window]-self.localX[ind], self.localY[window]-self.localY[ind], self.heading[ind])
+    def get_preview(self, ind, method = 'DISTANCE'):
+        if method is 'DISTANCE':
+            if not hasattr(self, 'preview_distance'):
+                print('class DataHelper -> set preview distance first : DataHelper.set_preview_distance(distance)')
+                raise ValueError
+            window = list(range(ind, self.nearest(self.distance[ind]+self.preview_distance, self.distance)))
+            if len(window) < 2:
+                window = list(range(ind,ind+1))
 
-    def get_preview_curve(self, ind):
-        window = list(range(ind, ind+self.preview_distance))
-        return self.station_curvature(self.localX[window], self.localY[window])
+        elif method is 'TIME':
+            if not hasattr(self, 'preview_time'):
+                print('class DataHelper -> set preview time first : DataHelper.set_preview_time(time)')
+                raise ValueError
+            window = list(range(ind, self.nearest(self.timestamp[ind]+self.preview_time, self.timestamp)))
+            if len(window) < 2:
+                window = list(range(ind, ind+1))
+
+        else:
+            print('class DataHelper -> Supported preview methods : {DISTANCE, TIME}')
+            raise ValueError
+
+        res = {}
+        if hasattr(self, 'df'):
+            for item in self.df.columns:
+                res[item] = self.df[item][window].to_numpy()
+            res['PreviewX'], res['PreviewY'] = self.get_preview_plane(window)
+            res['Curvature'] = self.curvature[window]
+            res['Distance'] = self.distance[window] - self.distance[ind]
+
+            #### TODO ####
+            '''
+            define output when data input is not in the form of pandas.dataframe
+            '''
+        # for item in res.keys():
+        #     res[item] = np.interp(rwindow, window, res[item], res[item][0], res[item][-1])
+        return res
+
+    def get_preview_plane(self, window):
+        #TODO : Condition Check
+        ind = window[0]
+        return self.transform_plane(self.localX[window]-self.localX[ind], self.localY[window]-self.localY[ind], self.heading[ind])
 
 
     @staticmethod
@@ -81,7 +142,7 @@ class DataHelper(object):
 
         return res
 
-    
+
     @staticmethod
     def transform_plane(localX, localY, heading):
 
@@ -93,9 +154,9 @@ class DataHelper(object):
 
 
     @staticmethod
-    def nearest(ind, localX, localY):
-        #TODO
-        pass
+    def nearest(origin, dist):
+        idx = np.abs(origin - dist).argmin()
+        return idx
 
     @staticmethod
     def geo_to_lin(lat, lon, origin):
@@ -110,7 +171,7 @@ class DataHelper(object):
         localX = _Ra * np.cos(origin[0]*_RAD_DEGREE) * delta_lon * np.pi/180.0
         localY = _Rn * delta_lat * np.pi/180.0
 
-        return localX , localY 
+        return localX , localY
 
     @staticmethod
     def lin_to_geo(localX, localY, origin):
@@ -130,7 +191,7 @@ class DataHelper(object):
         return lon , lat
 
     @staticmethod
-    def station_curvature(localX, localY):
+    def station_curvature(localX, localY, medfilt):
         x = localX
         y = localY
         dx = np.append([0], np.diff(x))
@@ -158,7 +219,8 @@ class DataHelper(object):
         k = np.array(k)
         k[k>0.5] = 0.5
         k[k<-0.5] = -0.5
-        k = signal.medfilt(k, 9)
+        # k = signal.medfilt(k, 9)
+        k = signal.medfilt(k, medfilt)
 
         return np.cumsum(s), k
 
@@ -188,3 +250,64 @@ class DataHelper(object):
                 val = np.mean(a[i-front:i+back+1])
             ret[i] = val
         return ret
+
+if __name__ == "__main__":
+    ''' DataHelper Example Code (datafile: std_xxx.csv) '''
+
+    import pdb
+    import numpy as np
+    import pandas as pd
+    import matplotlib.pyplot as plt
+
+    datafile = 'std_001.csv'
+    df = pd.read_csv(datafile)
+
+    dh = DataHelper(df)
+    print('List of local variables of DataHelper:\n', sorted([*vars(dh).keys()]))
+    print(' ')
+
+    dh.set_preview_time(1)
+    ind = 1
+    res = dh.get_preview(ind, method='TIME')  # df fields + [PreviewX, PreviewY, Curvature, Distance]
+    print('Preview information field list:\n', sorted([*res.keys()]))
+
+    ''' Time based preview '''
+    dh.set_preview_time(10.0)
+    ind = 1000  # Index at which preview function is executed
+    res = dh.get_preview(ind, method='TIME')
+
+    fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(20, 6))
+    ax1.plot(res['PosLocalX'], res['PosLocalY'])
+    ax2.plot(res['TimeStamp'],res['Curvature'])
+    ax3.plot(res['TimeStamp'],res['GPS_Speed'])
+
+    ax1.set_xlabel('PosLocalX')
+    ax1.set_ylabel('PosLocalY')
+    ax2.set_xlabel('TimeStamp')
+    ax2.set_ylabel('curvature')
+    ax3.set_xlabel('TimeStamp')
+    ax3.set_ylabel('GPS_Speed')
+
+    fig.suptitle('Time based preview [{}s]'.format(dh.preview_time))
+
+
+    ''' Distance based preview '''
+    dh.set_preview_distance(250.0) # 250m preview
+    ind = 1000 # Index at which preview function is executed
+    res = dh.get_preview(ind, method='DISTANCE')
+
+    fig2, (ax21, ax22, ax23) = plt.subplots(1, 3, figsize=(20, 6))
+    ax21.plot(res['PosLocalX'], res['PosLocalY'])
+    ax22.plot(res['TimeStamp'],res['Curvature'])
+    ax23.plot(res['TimeStamp'],res['GPS_Speed'])
+
+    ax21.set_xlabel('PosLocalX')
+    ax21.set_ylabel('PosLocalY')
+    ax22.set_xlabel('TimeStamp')
+    ax22.set_ylabel('curvature')
+    ax23.set_xlabel('TimeStamp')
+    ax23.set_ylabel('GPS_Speed')
+
+    fig2.suptitle('Distance based preview [{}m]'.format(dh.preview_distance))
+
+    plt.show()
