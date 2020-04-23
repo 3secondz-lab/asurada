@@ -24,7 +24,7 @@ class DataHelper(object):
                 pass
 
 
-            self.set_position(localX, localY)
+            self.set_position(localX, localY, medfilt)
 
         elif not hasattr(self, 'localX') or not hasattr(self, 'localY'):
             if not (localX is None or localY is None):
@@ -40,6 +40,8 @@ class DataHelper(object):
 
         if not heading is None:
             self.set_heading(heading)
+        else:
+            self.heading = self.get_heading()
 
         if not timestamp is None:
             self.set_timestamp(timestamp)
@@ -52,7 +54,7 @@ class DataHelper(object):
         self.lon = self.assign_checker(lon)
         self.origin[1] = lon[0]
 
-    def set_position(self, localX=None, localY=None):
+    def set_position(self, localX=None, localY=None, medfilt=15):
         if not localX is None and not localY is None:
             self.localX = self.assign_checker(localX)
             self.localY = self.assign_checker(localY)
@@ -120,7 +122,7 @@ class DataHelper(object):
             res['PreviewX'], res['PreviewY'] = self.get_preview_plane(window)
             res['Curvature'] = self.curvature[window]
             res['Distance'] = self.distance[window] - self.distance[ind]
-            res['AngleTrack'] = get_preview_heading(self, res, window)
+            res['AngleTrack'] = self.heading[window] - self.heading[ind]
 
             #### TODO ####
             '''
@@ -135,15 +137,8 @@ class DataHelper(object):
         ind = window[0]
         return self.transform_plane(self.localX[window]-self.localX[ind], self.localY[window]-self.localY[ind], self.heading[ind])
 
-    def get_preview_heading(self, preview, window):
-        if hasattr(self,'heading'):
-            return self.heading[window]
-        else:
-            try:
-                psi = np.arctan2(np.diff(self.['PreviewY']), np.diff(self.['PreviewX']))
-            except ValueError:
-                psi = np.NaN
-            return np.append(0, psi)
+    def get_heading(self):
+        return np.mod(np.pi/2 - np.arctan2(np.gradient(self.localY), np.gradient(self.localX)), 2*np.pi)
 
     @staticmethod
     def assign_checker(arg):
