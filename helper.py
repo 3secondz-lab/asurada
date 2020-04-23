@@ -9,7 +9,7 @@ class DataHelper(object):
 
         if not dataframe is None:
             assert sum([0 if x in dataframe.columns else 1 for x in
-            ['TimeStamp', 'PosLat', 'PosLon', 'PosLocalX', 'PosLocalY', 'GPS_Speed', 'AngleTrack']]) == 0, 'DataFrame Format MisMatch'
+            ['TimeStamp', 'PosLat', 'PosLon', 'PosLocalX', 'PosLocalY', 'GPS_Speed']]) == 0, 'DataFrame Format MisMatch'
 
             self.df = dataframe
             timestamp = dataframe['TimeStamp'].values
@@ -18,7 +18,11 @@ class DataHelper(object):
             localX = dataframe['PosLocalX'].values
             localY = dataframe['PosLocalY'].values
             speed = dataframe['GPS_Speed'].values
-            heading = dataframe['AngleTrack'].values
+            if 'AngleTrack' in dataframe:
+                heading = dataframe['AngleTrack'].values
+            else:
+                pass
+
 
             self.set_position(localX, localY)
 
@@ -116,6 +120,7 @@ class DataHelper(object):
             res['PreviewX'], res['PreviewY'] = self.get_preview_plane(window)
             res['Curvature'] = self.curvature[window]
             res['Distance'] = self.distance[window] - self.distance[ind]
+            res['AngleTrack'] = get_preview_heading(self, res, window)
 
             #### TODO ####
             '''
@@ -130,6 +135,15 @@ class DataHelper(object):
         ind = window[0]
         return self.transform_plane(self.localX[window]-self.localX[ind], self.localY[window]-self.localY[ind], self.heading[ind])
 
+    def get_preview_heading(self, preview, window):
+        if hasattr(self,'heading'):
+            return self.heading[window]
+        else:
+            try:
+                psi = np.arctan2(np.diff(self.['PreviewY']), np.diff(self.['PreviewX']))
+            except ValueError:
+                psi = np.NaN
+            return np.append(0, psi)
 
     @staticmethod
     def assign_checker(arg):
