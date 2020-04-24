@@ -372,11 +372,11 @@ if __name__ == "__main__":
         (datafile: std_xxx.csv (Record in time order),
                    pos_xxx.csv (Record in location order)) '''
 
-    # df = pd.read_csv('std_001.csv')
-    df = pd.read_csv('pos_001.csv')
+    # df = pd.read_csv('std_001.csv')  # 2544
+    # df = pd.read_csv('pos_001.csv')  # 5605
 
-    # df = pd.read_csv('mkkim-recoder-scz_msgs.csv')  # 현재 지원안됨.
-    # df = pd.read_csv('sdpark-recoder-scz_msgs.csv')  # 현재 지원안됨.
+    # df = pd.read_csv('mkkim-recoder-scz_msgs.csv')  # 50791 multiple laps
+    df = pd.read_csv('sdpark-recoder-scz_msgs.csv')  # 39574 multiple laps
 
     ''' 주행 궤적 기록 애니메이션 '''
     # ani = AnimatedScatter(df)
