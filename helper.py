@@ -48,6 +48,7 @@ class DataHelper(object):
                 self.set_lat(lat)
                 self.set_lon(lon)
                 self.set_position()
+        if not hasattr(self, 'localX') or not hasattr(self, 'localY'):
             self.set_position(localX, localY)
 
         # heading
