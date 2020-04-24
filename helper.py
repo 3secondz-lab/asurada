@@ -3,44 +3,60 @@ from scipy import signal
 import pandas as pd
 
 class DataHelper(object):
-    def __init__(self, dataframe=None, timestamp=None, lat=None, lon=None,
-                localX=None, localY=None, speed=None, heading=None, medfilt=15):
-        self.origin = np.array([None,None])
+    def __init__(self, dataframe, timestamp=None, speed=None,
+                 localX=None, localY=None, lat=None, lon=None,
+                 heading=None, medfilt=15):
 
+        self.origin = np.array([None,None])
         self.medfilt = medfilt
 
-        if not dataframe is None:
-            assert sum([0 if x in dataframe.columns else 1 for x in
-            ['TimeStamp', 'PosLat', 'PosLon', 'PosLocalX', 'PosLocalY', 'GPS_Speed', 'AngleTrack']]) == 0, 'DataFrame Format MisMatch'
+        self.df = dataframe  # necessary to make an output dictionary of 'get_preview'
 
-            self.df = dataframe
-            timestamp = dataframe['TimeStamp'].values
-            lat = dataframe['PosLat'].values
-            lon = dataframe['PosLon'].values
-            localX = dataframe['PosLocalX'].values
-            localY = dataframe['PosLocalY'].values
-            speed = dataframe['GPS_Speed'].values
-            heading = dataframe['AngleTrack'].values
+        # If there is no input for each variable required for DataHelper operation,
+        # it is taken from the dataframe and used.
 
-            self.set_position(localX, localY)
+        # timestamp
+        if timestamp is None:  # if a variable 'timestamp' is not None, we can execute the function 'set_timestamp()' immediately'
+            # if not, we have to find the values from df.
+            assert 'TimeStamp' in self.df.columns, 'Necessary Field. If your dataframe doesn\'t have TimeStamp, you can input it by timestamp= '
+            timestamp = self.df['TimeStamp'].values
+        self.set_timestamp(timestamp)
 
-        elif not hasattr(self, 'localX') or not hasattr(self, 'localY'):
-            if not (localX is None or localY is None):
-                self.set_position(localX, localY)
+        # speed
+        if speed is None:
+            assert 'GPS_Speed' in dataframe.columns, 'Necessary Field. If your dataframe doesn\'t have GPS_Speed, you can input it by speed= '
+            speed = self.df['GPS_Speed'].values
+        self.set_speed(speed)
 
-            elif not (lat is None or lon is None):
+        # localX/ localY
+        if localX is None or localY is None:
+            if lat is None or lon is None:
+                if 'PosLocalX' in self.df.columns and 'PosLocalY' in self.df.columns:  # when df has localX/Y
+                    localX = self.df['PosLocalX'].values
+                    localY = self.df['PosLocalY'].values
+                    self.set_position(localX, localY)
+                elif 'PosLat' in self.df.columns and 'PosLon' in self.df.columns:  # when df has lat/lon instead of localX/Y
+                    lat = self.df['PosLat'].values
+                    lon = self.df['PosLon'].values
+                    self.set_lat(lat)
+                    self.set_lon(lon)
+                    self.set_position()
+                else:
+                    raise NameError('Either (PosLocalX, PosLocalY) or (PosLat, PosLon) must be essential. \
+                                     You can input these by (localX=, localY=) or (lat=, lon=)')
+            else:
                 self.set_lat(lat)
                 self.set_lon(lon)
                 self.set_position()
+            self.set_position(localX, localY)
 
-        if not speed is None:
-            self.set_speed(speed)
-
-        if not heading is None:
-            self.set_heading(heading)
-
-        if not timestamp is None:
-            self.set_timestamp(timestamp)
+        # heading
+        if heading is None:
+            if 'AngleTrack' in self.df:
+                heading = self.df['AngleTrack'].values
+            else:
+                heading = self.get_heading()
+        self.set_heading(heading)
 
     def set_lat(self, lat):
         self.lat = self.assign_checker(lat)
@@ -118,6 +134,7 @@ class DataHelper(object):
             res['PreviewX'], res['PreviewY'] = self.get_preview_plane(window)
             res['Curvature'] = self.curvature[window]
             res['Distance'] = self.distance[window] - self.distance[ind]
+            res['AngleTrack'] = self.heading[window] - self.heading[ind]
 
             #### TODO ####
             '''
@@ -132,6 +149,8 @@ class DataHelper(object):
         ind = window[0]
         return self.transform_plane(self.localX[window]-self.localX[ind], self.localY[window]-self.localY[ind], self.heading[ind])
 
+    def get_heading(self):
+        return np.mod(np.pi/2 - np.arctan2(np.gradient(self.localY), np.gradient(self.localX)), 2*np.pi)
 
     @staticmethod
     def assign_checker(arg):
