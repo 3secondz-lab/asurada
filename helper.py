@@ -2,6 +2,8 @@ import numpy as np
 from scipy import signal
 import pandas as pd
 
+import pdb
+
 class DataHelper(object):
     def __init__(self, dataframe, timestamp=None, speed=None,
                  localX=None, localY=None, lat=None, lon=None,
@@ -131,7 +133,10 @@ class DataHelper(object):
         res = {}
         if hasattr(self, 'df'):
             for item in self.df.columns:
-                res[item] = self.df[item][window].to_numpy()
+                try:
+                    res[item] = self.df[item][window].to_numpy()
+                except:
+                    res[item] = self.df[item].iloc[window].to_numpy()
             res['PreviewX'], res['PreviewY'] = self.get_preview_plane(window)
             res['Curvature'] = self.curvature[window]
             res['Distance'] = self.distance[window] - self.distance[ind]
