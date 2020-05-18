@@ -11,7 +11,7 @@ from mpl_toolkits.mplot3d import Axes3D
 from Utils import *
 
 class PlaneFit:
-    def __init__(self, df, df_name, previewHelper, previewType, predictLeng,
+    def __init__(self, df, df_name, previewHelper, previewType, predictLeng, recFreq,
                         order, xlabel=None, ylabel=None, zlabel=None, vis=False):
 
         assert order == 1 or order == 2, 'Order has to be 1 or 2'
@@ -29,30 +29,37 @@ class PlaneFit:
             dataset4fit = 'ks_{}_{}m.npy'.format(df_name, preview_distance)
 
         if not os.path.isfile(dataset4fit):
-            ks = []
-            for idx in range(len(df)):
-                preview = previewHelper.get_preview(idx, previewType)
-                ks.append(preview['Curvature'])
+            ks = buildDataset4fit(df, previewHelper, previewType)
+            np.save(dataset4fit, ks)
+        else:
+            ks = np.load(dataset4fit)
 
-            pad = len(max(ks, key=len))  # just for saving data pair as .npy
-            ks_arr = np.array([k.tolist() + [np.nan]*(pad-len(k)) for k in ks])
-
-            np.save(dataset4fit, ks_arr)
-
-        ks = np.load(dataset4fit)
+        # ks = np.load(dataset4fit)
         vs = df['GPS_Speed'].values
 
-        vsdiff = vs[predictLeng:] - vs[:-predictLeng]
+        vsdiff = vs[predictLeng*recFreq:] - vs[:-predictLeng*recFreq]
 
-        vs = vs[:-predictLeng]  # X1
+        vs = vs[:-predictLeng*recFreq]  # X1
 
         self.k_preview_idx = 3
-        ks = ks[:-predictLeng, self.k_preview_idx:]  # X2  # 초반에 나오는 curvature는 거의 0에 가까워서 제외.
+        ks = ks[:-predictLeng*recFreq, self.k_preview_idx:]  # X2
+        # 초반에 나오는 curvature는 거의 0에 가까워서 제외.
+        ## record 데이터에서는 ks가 -1, -2 데이터가 nan임... 왜 그렇지...
+        # (사실상 평균이라기 보다 median임., previewType이 시간이고, data도 시간으로 정렬되어 있어도 preview curvature의 길이가 달라지나봄.)
 
+        # 평균 preview 길이 구하기.
+        avgLenPreview = int(np.median(np.sum(np.isnan(ks), axis=1)))
+        ks = ks[:, :-avgLenPreview]
+
+        ## 이 부분도, 이 관계를 다시 찾아야 할지도 모름...,
+        ## NN으로 가면 abs나 (-1) 없이 raw data를 그대로 쓸 수 있을지도...
         ks_transformed = abs(ks)
         vs_transformed = (-1)*vs
 
+        # pdb.set_trace()
+
         # remove nan value
+        ## track 한바퀴가 거의 끝나갈 쯤이라, 충분한 preview가 생성되지 않는 경우.
         notNaNidx = np.where(np.sum(np.isnan(ks_transformed), axis=1)==0)
         ks_transformed = ks_transformed[notNaNidx]
         vs_transformed = vs_transformed[notNaNidx]
@@ -63,16 +70,21 @@ class PlaneFit:
         # ks_low = pca.fit_transform(ks_transformed)
 
         # k-feature 2.
-        ks_mean = np.nanmean(ks_transformed, axis=1)
+        # ks_mean = np.nanmean(ks_transformed, axis=1)
+
+        # k-feature 3. (raw data at predictLeng aheads)
+        ks_raw = ks_transformed[:, -1]
 
         # normalization
         self.vs_norm = dataNormalization(vs_transformed)
         # self.ks_low_norm = dataNormalization(ks_low)  # pca, 지원안됨
-        self.ks_mean_norm = dataNormalization(ks_mean)
+        # self.ks_mean_norm = dataNormalization(ks_mean)
+        self.ks_raw_norm = dataNormalization(ks_raw)
 
         # Planefit model
         # data = np.c_[self.vs_norm.data, self.ks_low_norm.data, vsdiff]  # pca, 지원안됨
-        data = np.c_[self.vs_norm.data, self.ks_mean_norm.data, vsdiff]
+        # data = np.c_[self.vs_norm.data, self.ks_mean_norm.data, vsdiff]
+        data = np.c_[self.vs_norm.data, self.ks_raw_norm.data, vsdiff]
 
         X, Y = np.meshgrid(np.arange(-3, 3, 0.5), np.arange(-4, 4, 0.5))  # for vis
 
@@ -86,6 +98,24 @@ class PlaneFit:
             self.C,_,_,_ = scipy.linalg.lstsq(A, data[:, 2])
             Z = self.C[0]*(X**2) + self.C[1]*X + self.C[2]*(Y**2) + self.C[3]*Y + self.C[4]
 
+        # fig, (ax1, ax2, ax3) = plt.subplots(1, 3)
+        # ax1.scatter(data[:, 0], data[:, 1], alpha=0.3)
+        # ax2.scatter(data[:, 0], data[:, 2], alpha=0.3)
+        # ax3.scatter(data[:, 1], data[:, 2], alpha=0.3)
+        #
+        # ax1.set_xlabel('(-1)*speed')
+        # ax1.set_ylabel('feature of abs(k)')
+        #
+        # ax2.set_xlabel('(-1)*speed')
+        # ax2.set_ylabel('speedDiff')
+        #
+        # ax3.set_xlabel('feature of abs(k)')
+        # ax3.set_ylabel('speedDiff')
+        #
+        # plt.show()
+        #
+        # pdb.set_trace()
+
         if vis:
             fig = plt.figure()
             ax = fig.gca(projection='3d')
@@ -96,7 +126,7 @@ class PlaneFit:
             ax.set_zlabel(zlabel)
             plt.show()
 
-    def test(self, df, previewHelper, previewType):
+    def test(self, df, previewHelper, previewType, recFreq):
 
         assert previewType == 'TIME', 'previewType (DISTANCE) is not currently supported.'
 
@@ -106,24 +136,28 @@ class PlaneFit:
         elif previewType == 'DISTANCE':
             previewHelper.set_preview_distance(self.predictLeng)
 
-        curvature = []
+        curvature = []  # abs
         predict = []
 
         last_valid_idx = -1
 
         for idx in range(len(df)):
-            print('Predicting... @ origin idx {}'.format(idx), end='\r')
+            print('Predicting... @ origin idx {}/{}'.format(idx, len(df)), end='\r')
 
-            v = df['GPS_Speed'].iloc[idx]
+            v = df['GPS_Speed'].iloc[idx]  # current speed
             v_norm = ((-1)*v - self.vs_norm.mu)/self.vs_norm.std
 
             preview = previewHelper.get_preview(idx, previewType)
 
             if previewType == 'TIME':
                 ks = preview['Curvature']
-                if len(ks) == self.predictLeng * 20:  # unit: 0.05s
+                # pdb.set_trace()
+                if len(ks) > self.predictLeng * recFreq:
+                    ks = ks[:self.predictLeng * recFreq]
+                if len(ks) == self.predictLeng * recFreq:
                     k = np.mean(abs(ks[self.k_preview_idx:]))
-                    k_norm = (k - self.ks_mean_norm.mu)/self.ks_mean_norm.std
+                    # k_norm = (k - self.ks_mean_norm.mu)/self.ks_mean_norm.std
+                    k_norm = (k - self.ks_raw_norm.mu)/self.ks_raw_norm.std
 
                     if self.order == 1:
                         vdiff = self.C[0] * v_norm + self.C[1] * k_norm + self.C[2]
@@ -137,6 +171,7 @@ class PlaneFit:
                     break
             elif previewType == 'DISTANCE':
                 pass
+        print('Predicting... @ origin idx {}/{}'.format(idx, len(df)))
         return np.array(predict), np.array(curvature), last_valid_idx
 
 class PolyFit:
@@ -204,13 +239,13 @@ class PolyFit:
             for i in range(order):  # k=2 -> 0:**2, 1:**1, 2:**0
                 appy = [yy+self.params[i]*(xx**(order-i)) for xx, yy in zip(appx, appy)]
             plt.plot(appx, appy, 'r--', linewidth=2)
-            plt.hold(True)
+            # plt.hold(True)
             plt.scatter(x, y, alpha=0.1)
             plt.xlabel(xlabel)
             plt.ylabel(ylabel)
             plt.show()
 
-    def test(self, df, previewHelper, previewType, predictLeng):
+    def test(self, df, previewHelper, previewType, predictLeng, recFreq):
         # predict the speed at predictLeng (s or m) ahead
 
         assert previewType == 'TIME', 'previewType (DISTANCE) is not currently supported.'
@@ -225,13 +260,14 @@ class PolyFit:
 
         last_valid_idx = -1
 
+        # pdb.set_trace()
         for idx in range(len(df)):
-            print('Predicting... @ origin idx {}'.format(idx), end='\r')
+            print('Predicting... @ origin idx {}/{}'.format(idx, len(df)), end='\r')
 
             preview = previewHelper.get_preview(idx, previewType)
 
             if previewType == 'TIME':
-                if len(preview['Curvature']) == predictLeng * 20:  # unit: 0.05s
+                if len(preview['Curvature']) >= predictLeng * recFreq:  # unit: 0.05s
                     k = abs(preview['Curvature'][-1])
                     v = self.params[-1]
 
@@ -247,4 +283,5 @@ class PolyFit:
 
             elif previewType == 'DISTANCE':
                 pass
+        print('Predicting... @ origin idx {}/{}'.format(idx, len(df)))
         return np.array(predict), np.array(curvature), last_valid_idx

@@ -114,7 +114,7 @@ class DataHelper(object):
             if not hasattr(self, 'preview_distance'):
                 print('class DataHelper -> set preview distance first : DataHelper.set_preview_distance(distance)')
                 raise ValueError
-            window = list(range(ind, self.nearest(self.distance[ind]+self.preview_distance, self.distance)))
+            window = list(range(ind, self.nearest(self.distance[ind]+self.preview_distance, self.distance)+1))
             if len(window) < 2:
                 window = list(range(ind,ind+1))
 
@@ -122,7 +122,7 @@ class DataHelper(object):
             if not hasattr(self, 'preview_time'):
                 print('class DataHelper -> set preview time first : DataHelper.set_preview_time(time)')
                 raise ValueError
-            window = list(range(ind, self.nearest(self.timestamp[ind]+self.preview_time, self.timestamp)))
+            window = list(range(ind, self.nearest(self.timestamp[ind]+self.preview_time, self.timestamp)+1))
             if len(window) < 2:
                 window = list(range(ind, ind+1))
 
