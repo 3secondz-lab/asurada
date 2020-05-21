@@ -1,4 +1,5 @@
-from Utils import create_input_files
+from UtilsAtt import create_dataset, create_input_files
+
 
 if __name__ == "__main__":
     '''
@@ -11,7 +12,7 @@ if __name__ == "__main__":
     '''
     dataPath = './previewData'
 
-    drdFile = './Data/std_001.csv'  # drd: driving record data
+    drdFile = '../Data/std_001.csv'  # drd: driving record data
     drdName = 'std001'  # recFreq = 20
 
     recFreq = 20  # [Hz]

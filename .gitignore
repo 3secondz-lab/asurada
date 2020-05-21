@@ -118,4 +118,5 @@ dmypy.json
 .pyre/
 
 /AttentionModel/previewData
+/AttentionModel/*.tar
 /BaselineModel/*.npy
