@@ -7,6 +7,7 @@ import pandas as pd
 from scipy.stats import norm
 import matplotlib.pyplot as plt
 
+
 class dataNormalization:
     def __init__(self, data):
         self.mu, self.std = norm.fit(data)
@@ -28,8 +29,7 @@ def files2df(DATA_PATH, files):
         df_list.append(pd.read_csv(filepath))
     return pd.concat(df_list)
 
-def draw_result_graph_fitting(true, predict, curvature, previewType, predictLength, true_curv=None,
-                                idxFrom=0, idxTo=None):
+def draw_result_graph_fitting(true, predict, curvature, previewType, predictLength, true_curv=None, idxFrom=0, idxTo=None):
     if idxTo is None:
         idxTo = len(true)
 
@@ -74,8 +74,33 @@ def buildDataset4fit(df, previewHelper, previewType):
         preview = previewHelper.get_preview(idx, previewType)
         ks.append(preview['Curvature'])
 
-    pdb.set_trace()
     pad = len(max(ks, key=len))  # just for saving data pair as .npy
     ks_arr = np.array([k.tolist() + [np.nan]*(pad-len(k)) for k in ks])
 
     return ks_arr
+
+if __name__ == "__main__":
+    '''
+        previewData
+            |__ drdName
+                |__ previewImgs (.jpg)
+            |__ dataset_drdName.json
+    '''
+
+    dataPath = './previewData'
+
+    # drdFile = './Data/mkkim-recoder-scz_msgs.csv'
+    # drdName = 'mkkim'  # recFreq = 10
+
+    drdFile = './Data/std_001.csv'  # drd: driving record data
+    drdName = 'std001'  # recFreq = 20
+
+    recFreq = 20  # [Hz]
+    dvRate = 2  # predict every (recFreq/sWindow)Hz record points [unit:(1/recFreq)]
+    previewTime = 10  # [s]
+
+    # Save previews as imgs and corresponding speed targets
+    create_dataset(dataPath, drdFile, drdName, previewTime=previewTime, myDPI=120, recFreq=recFreq, dvRate=dvRate)
+
+    # Create input files from dataset.json file for model training
+    create_input_files(dataPath, drdName, previewTime=previewTime)

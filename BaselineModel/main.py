@@ -2,23 +2,25 @@
 import pdb
 
 import os
+import sys
+sys.path.append(os.path.dirname(os.path.abspath(os.path.dirname(__file__))))  # for helper
+
 import numpy as np
 import pandas as pd
-
 import matplotlib.pyplot as plt
 
 from helper import DataHelper
 
 import Model
 from Utils import *
-from GraphUtils import *
 
 model1 = True
 model2 = True
 
 ''' Path Setting (Data, Model) '''
-current_dir = os.path.dirname(os.path.abspath(__file__))
-DATA_PATH = os.path.join(current_dir, 'DATA')
+# current_dir = os.path.dirname(os.path.abspath(__file__))
+# DATA_PATH = os.path.join(current_dir, 'DATA')
+DATA_PATH = '../Data'
 
 
 ''' Training/Test Data Setting

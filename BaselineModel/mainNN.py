@@ -1,6 +1,9 @@
 import pdb
 
 import os
+import sys
+sys.path.append(os.path.dirname(os.path.abspath(os.path.dirname(__file__))))  # for helper
+
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -17,7 +20,7 @@ from tqdm import tqdm
 ''' ================ '''
 ''' = Path Setting = '''
 ''' ================ '''
-DATA_PATH = './DATA'
+DATA_PATH = '../DATA'
 # current_dir = os.path.dirname(os.path.abspath(__file__))
 # DATA_PATH = os.path.join(current_dir, 'DATA')
 
