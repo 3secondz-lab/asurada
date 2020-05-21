@@ -117,4 +117,5 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
-/previewData
+/AttentionModel/previewData
+/BaselineModel/*.npy
