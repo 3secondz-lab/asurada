@@ -16,21 +16,22 @@ data_folder = './previewData'  # folder with data files saved by create_input_fi
 data_name = 'std001_10_previewTime_0.5_sWindow'  # base name shared by data files
 
 # Model parameters
-attention_dim = 512
-decoder_dim = 512
-dropout = 0.5
+attention_dim = 64  # 512 -> 256 -> 128 -> 64 -> 32
+decoder_dim = 64
+dropout = 0.5  # 0.5 -> 0.2
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")  # sets device for model and PyTorch tensors
 cudnn.benchmark = True  # set to true only if inputs to model are fixed size; otherwise lot of computational overhead
 
 # Training parameters
 start_epoch = 0
-epochs = 15  # number of epochs to train for (if early stopping is not triggered)
-epochs_since_improvement = 0  # keeps track of number of epochs since there's been an improvement in validation BLEU
-batch_size = 32
-# workers = 1  # for data-loading; right now, only 1 works with h5py
-workers = 0  # !!!!! for window !!!!!
+epochs = 50  # number of epochs to train for (if early stopping is not triggered)
+epochs_since_improvement = 0  # keeps track of number of epochs since there's been an improvement in validation MAPE
+batch_size = 128  # 32 -> 64
+workers = 0  # # for data-loading with h5py !!!!! for window only 0 !!!!!
 encoder_lr = 1e-4  # learning rate for encoder if fine-tuning
-decoder_lr = 4e-4  # learning rate for decoder
+decoder_lr = 1e-4  # learning rate for decoder (4e-4 -> 1e-4)
+# encoder_lr = 5e-5  # learning rate for encoder if fine-tuning
+# decoder_lr = 5e-5  # learning rate for decoder (4e-4 -> 1e-4)
 grad_clip = 5.  # clip gradients at an absolute value of
 alpha_c = 1.  # regularization parameter for 'doubly stochastic attention', as in the paper
 best_mape = 100.  # early stopping criteria
@@ -44,7 +45,7 @@ def main():
         Training and Validation
     '''
 
-    global epochs_since_improvement, checkpoint, start_epoch, fine_tune_encoder, dataName
+    global epochs_since_improvement, checkpoint, start_epoch, fine_tune_encoder, dataName, best_mape
 
     # Initialize / load checkpoint
     if checkpoint is None:
@@ -85,7 +86,8 @@ def main():
         SpeedDataset(data_folder, data_name, 'TRAIN', transform=transforms.Compose([normalize])),
         batch_size=batch_size, shuffle=True, num_workers=workers, pin_memory=True)
     val_loader = torch.utils.data.DataLoader(
-        SpeedDataset(data_folder, data_name, 'VAL', transform=transforms.Compose([normalize]), mean=train_loader.dataset.mean, std=train_loader.dataset.std),
+        SpeedDataset(data_folder, data_name, 'VAL', transform=transforms.Compose([normalize]),
+        mean=train_loader.dataset.mean, std=train_loader.dataset.std),
         batch_size=batch_size, shuffle=True, num_workers=workers, pin_memory=True)
 
     # Epochs
@@ -94,7 +96,7 @@ def main():
         # Decay learning rate if there is no improvement for 8 consecutive epochs, and terminate training after 20
         if epochs_since_improvement == 20:
             break
-        if epochs_since_improvement > 0 and epochs_since_improvement % 8 == 0:
+        if epochs_since_improvement > 0 and epochs_since_improvement % 3 == 0:  # 8 -> 3
             adjust_learning_rate(decoder_optimizer, 0.8)
             if fine_tune_encoder:
                 adjust_learning_rate(encoder_optimizer, 0.8)
@@ -108,7 +110,7 @@ def main():
               decoder_optimizer=decoder_optimizer,
               epoch=epoch)
 
-        # # One epoch's validation
+        # One epoch's validation
         recent_mape = validate(val_loader=val_loader,
                                encoder=encoder,
                                decoder=decoder,
@@ -116,6 +118,7 @@ def main():
 
         # Check if there was an improvement
         is_best = recent_mape < best_mape
+        best_mape = min(recent_mape, best_mape)
         if not is_best:
             epochs_since_improvement += 1
             print("\nEpochs since last improvement: %d\n" % (epochs_since_improvement,))
@@ -123,6 +126,7 @@ def main():
             epochs_since_improvement = 0
 
         # Save checkpoint
+        # train_loader: for trMean, trStd
         save_checkpoint(data_name, epoch, epochs_since_improvement, encoder, decoder, encoder_optimizer,
                         decoder_optimizer, train_loader, recent_mape, is_best)
 
@@ -228,12 +232,9 @@ def validate(val_loader, encoder, decoder, criterion):
     if encoder is not None:
         encoder.eval()
 
-    batch_time = AverageMeter()
-    losses = AverageMeter()
-    mapes = AverageMeter()
-    rmses = AverageMeter()
-
-    start = time.time()
+    losses = []
+    mapes = []
+    rmses = []
 
     mean = val_loader.dataset.mean  # == train_loader.dataset.mean
     std = val_loader.dataset.std  # == train_loader.dataset.std
@@ -246,11 +247,45 @@ def validate(val_loader, encoder, decoder, criterion):
             imgs = imgs.to(device)
             target_speeds = target_speeds.to(device)
 
-            # Forward prop.
-            imgs = encoder(imgs)
-            predictions, alphas = decoder(imgs, target_speeds)
+            # Encode
+            encoder_out = encoder(imgs)  # (1, enc_image_size, enc_image_size, encoder_dim)
+            batch_size = encoder_out.size(0)
+            enc_image_size = encoder_out.size(1)
+            encoder_dim = encoder_out.size(3)
 
-            targets = target_speeds[:, 1:]  # exclude current speed
+            # Flatten encoding
+            encoder_out = encoder_out.view(batch_size, -1, encoder_dim)  # (1, num_pixels, encoder_dim)
+            num_pixels = encoder_out.size(1)
+
+            current_speed = target_speeds[:, 0].reshape(-1, 1)
+            current_speed = (current_speed - mean) / std
+            current_speed = current_speed.to(device)
+
+            decode_length = target_speeds.size(1) - 1
+
+            predictions = torch.zeros(batch_size, decode_length).to(device)
+            alphas = torch.zeros(batch_size, decode_length, num_pixels).to(device)
+
+            h, c = decoder.init_hidden_state(encoder_out)
+
+            for t in range(decode_length):
+
+                attention_weighted_encoding, alpha = decoder.attention(encoder_out, h)  # (s, encoder_dim), (s, num_pixels)
+
+                gate = decoder.sigmoid(decoder.f_beta(h))  # gating scalar, (s, encoder_dim)
+                attention_weighted_encoding = gate * attention_weighted_encoding
+
+                if t == 0:
+                    h, c = decoder.decode_step(torch.cat([current_speed, attention_weighted_encoding], dim=1), (h, c))
+                else:
+                    h, c = decoder.decode_step(torch.cat([preds, attention_weighted_encoding], dim=1), (h, c))
+
+                preds = decoder.fc(h)
+
+                predictions[:, t] = preds.squeeze(dim=1)
+                alphas[:, t, :] = alpha
+
+            targets = target_speeds[:, 1:]
 
             # Calculate loss
             loss = criterion(predictions, targets)
@@ -260,18 +295,19 @@ def validate(val_loader, encoder, decoder, criterion):
 
             # Keep track of metrics
             mape, rmse = accuracy(predictions*std+mean, targets*std+mean)
-            batch_time.update(time.time() - start)
-            losses.update(loss.item())
-            mapes.update(mape)
-            rmses.update(rmse)
 
-            start = time.time()
+            losses.append(loss)
+            mapes.append(mape)
+            rmses.append(rmse)
 
         print(' ')
-        print("""VAL * LOSS - {loss.val:.4f} ({loss.avg:.3f})\t MAPE - {mape.val:.4f} ({mape.avg:.3f})\t RMSE - {rmse.val:.4f} ({rmse.avg:.3f})\n""".format(loss=losses,
-                                                                                  mape=mapes,
-                                                                                  rmse=rmses))
-    return mape
+
+        avgLoss = sum(losses)/len(losses)
+        avgMAPE = sum(mapes)/len(mapes)
+        avgRMSE = sum(rmses)/len(rmses)
+        print('VAL * LOSS - {:.4f} MAPE - {:.4f} RMSE - {:.4f}'.format(avgLoss, avgMAPE, avgRMSE))
+
+    return avgMAPE
 
 if __name__ == '__main__':
     main()

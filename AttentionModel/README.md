@@ -12,3 +12,9 @@ For model training (training/validation),
 ```python
 train.py
 ```
+
+For model evaluation,
+```python
+eval.py
+eval.py -v True
+```

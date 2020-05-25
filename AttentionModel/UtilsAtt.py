@@ -30,7 +30,8 @@ def preview2img(x, y):
 
     return fig, extent
 
-def create_dataset(dataPath, drdFile, drdName, previewTime, myDPI, recFreq=10, dvRate=2, trvRate=0.8):
+def create_dataset(dataPath, drdFiles, drdFiles_te, drdName, previewTime, myDPI, recFreq=10, dvRate=2, trvRate=0.8):
+# def create_dataset(dataPath, drdFile, drdName, previewTime, myDPI, recFreq=10, dvRate=2, trvRate=0.8):
     '''
         Create a dataset for Training/Validation
         # input:
@@ -45,45 +46,65 @@ def create_dataset(dataPath, drdFile, drdName, previewTime, myDPI, recFreq=10, d
     if not os.path.isdir(imgDir):
         os.mkdir(imgDir)
 
-    df = pd.read_csv(drdFile)
+    # nbTrRecords = 0
+    # dfList = []
+    # for drdFile in drdFiles:
+    #     df = pd.read_csv(drdFile)
+    #     dfList.append(df)
+    #     nbTrRecords += len(df)
+    # pdb.set_trace()
+    # df = pd.concat(dfList, axis=0, ignore_index=True)
+    # drdFile을 concat 하면 안됨! preview를 index로 얻어오므로,
+    # 서로 다른 record에 대해서 preview가 겹칠 수 없으니까.
 
-    dh = DataHelper(df)
-    dh.set_preview_time(previewTime)
+    drdList = [(x, 'Train') for x in drdFiles] + [(x, 'Test') for x in drdFiles_te]
 
+    imgIdx = -1  # imgIdx starts at 0
     dataSet = []
-    s = df['GPS_Speed'].values
-    sWindow = int(recFreq/dvRate)  # predict every sHz record points [unit:(1/recFreq)]
-    for i in tqdm(range(len(df))):
-        data = {}
+    for drdFile, dataType in drdList:
+        df = pd.read_csv(drdFile)  # single drdFile
 
-        imgFName = '{:06}.jpg'.format(i)
-        imgPath = os.path.join(imgDir, imgFName)
+        dh = DataHelper(df)
+        dh.set_preview_time(previewTime)
 
-        preview = dh.get_preview(i, 'TIME')
-        x = preview['PreviewY']
-        y = preview['PreviewX']
+        s = df['GPS_Speed'].values
+        sWindow = int(recFreq/dvRate)  # predict every sHz record points [unit:(1/recFreq)]
+        for i in tqdm(range(len(df))):
+            data = {}
 
-        sTarget = s[i:i+(previewTime*recFreq)+1]
+            imgIdx += 1
 
-        if len(sTarget) <= previewTime*recFreq:
-            continue  # except when the previwe is not long enough
+            imgFName = '{:06}.jpg'.format(imgIdx)
+            imgPath = os.path.join(imgDir, imgFName)
 
-        sTarget = sTarget[range(0, len(sTarget), sWindow)]
+            preview = dh.get_preview(i, 'TIME')
+            x = preview['PreviewY']
+            y = preview['PreviewX']
 
-        # imgs
-        fig, extent = preview2img(x, y)
-        fig.savefig(imgPath, dpi=myDPI, bbox_inches=extent, format='jpg',
-                                facecolor=fig.get_facecolor(), transparent=True)
-        plt.close(fig)
+            sTarget = s[i:i+(previewTime*recFreq)+1]
 
-        data['drdName'] = drdName
-        data['imgFName'] = imgFName
-        data['sTarget'] = sTarget.tolist()
-        data['sWindow'] = sWindow * (1/recFreq)
-        data['split'] = 'val' if random() > trvRate else 'train'
-        data['previewTime'] = previewTime
+            if len(sTarget) <= previewTime*recFreq:
+                continue  # except when the previwe is not long enough
 
-        dataSet.append(data)
+            sTarget = sTarget[range(0, len(sTarget), sWindow)]
+
+            # imgs
+            fig, extent = preview2img(x, y)
+            fig.savefig(imgPath, dpi=myDPI, bbox_inches=extent, format='jpg',
+                                    facecolor=fig.get_facecolor(), transparent=True)
+            plt.close(fig)
+
+            data['drdName'] = drdName
+            data['imgFName'] = imgFName
+            data['sTarget'] = sTarget.tolist()
+            data['sWindow'] = sWindow * (1/recFreq)
+            data['previewTime'] = previewTime
+            if dataType == 'Train':
+                data['split'] = 'val' if random() > trvRate else 'train'
+            elif dataType == 'Test':
+                data['split'] = 'test'
+
+            dataSet.append(data)
 
     with open('{}/dataset_{}.json'.format(dataPath, drdName), 'w') as j:
         json.dump(dataSet, j)
@@ -104,6 +125,8 @@ def create_input_files(dataPath, drdName, previewTime):
     tr_ImgSpeeds = []
     val_ImgPaths = []
     val_ImgSpeeds = []
+    test_ImgPaths = []
+    test_ImgSpeeds = []
 
     for img in data:
         imgPath = os.path.join(dataPath, img['drdName'], img['imgFName'])
@@ -114,16 +137,21 @@ def create_input_files(dataPath, drdName, previewTime):
         elif img['split'] in {'val'}:
             val_ImgPaths.append(imgPath)
             val_ImgSpeeds.append(img['sTarget'])
+        elif img['split'] in {'test'}:
+            test_ImgPaths.append(imgPath)
+            test_ImgSpeeds.append(img['sTarget'])
 
     # Sanity check
     assert len(tr_ImgPaths) == len(tr_ImgSpeeds)
     assert len(val_ImgPaths) == len(val_ImgSpeeds)
+    assert len(test_ImgPaths) == len(test_ImgSpeeds)
 
     # Create a base name for all output files
     baseFName = drdName + '_{}_previewTime_{}_sWindow'.format(img['previewTime'], img['sWindow'])
 
     for imgPaths, imgSpeeds, split in [(tr_ImgPaths, tr_ImgSpeeds, 'TRAIN'),
-                                       (val_ImgPaths, val_ImgSpeeds, 'VAL')]:
+                                       (val_ImgPaths, val_ImgSpeeds, 'VAL'),
+                                       (test_ImgPaths, test_ImgSpeeds, 'TEST')]:
 
         with h5py.File(os.path.join(dataPath, split + '_IMAGES_' + baseFName + '.hdf5'), 'w') as h:
             imgs = h.create_dataset('images', (len(imgPaths), 3, 224, 224), dtype = 'uint8')
