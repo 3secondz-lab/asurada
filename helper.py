@@ -2,8 +2,6 @@ import numpy as np
 from scipy import signal
 import pandas as pd
 
-import pdb
-
 class DataHelper(object):
     def __init__(self, dataframe, timestamp=None, speed=None,
                  localX=None, localY=None, lat=None, lon=None,
@@ -114,7 +112,7 @@ class DataHelper(object):
             if not hasattr(self, 'preview_distance'):
                 print('class DataHelper -> set preview distance first : DataHelper.set_preview_distance(distance)')
                 raise ValueError
-            window = list(range(ind, self.nearest(self.distance[ind]+self.preview_distance, self.distance)+1))
+            window = list(range(ind, self.nearest(self.distance[ind]+self.preview_distance, self.distance)))
             if len(window) < 2:
                 window = list(range(ind,ind+1))
 
@@ -122,7 +120,7 @@ class DataHelper(object):
             if not hasattr(self, 'preview_time'):
                 print('class DataHelper -> set preview time first : DataHelper.set_preview_time(time)')
                 raise ValueError
-            window = list(range(ind, self.nearest(self.timestamp[ind]+self.preview_time, self.timestamp)+1))
+            window = list(range(ind, self.nearest(self.timestamp[ind]+self.preview_time, self.timestamp)))
             if len(window) < 2:
                 window = list(range(ind, ind+1))
 
@@ -133,10 +131,7 @@ class DataHelper(object):
         res = {}
         if hasattr(self, 'df'):
             for item in self.df.columns:
-                try:
-                    res[item] = self.df[item][window].to_numpy()
-                except:
-                    res[item] = self.df[item].iloc[window].to_numpy()
+                res[item] = self.df[item][window].to_numpy()
             res['PreviewX'], res['PreviewY'] = self.get_preview_plane(window)
             res['Curvature'] = self.curvature[window]
             res['Distance'] = self.distance[window] - self.distance[ind]
@@ -178,7 +173,6 @@ class DataHelper(object):
         preview = m.dot(np.vstack(([localX],[localY])))
 
         return preview[0], preview[1]
-
 
     @staticmethod
     def nearest(origin, dist):
