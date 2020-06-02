@@ -120,3 +120,5 @@ dmypy.json
 /AttentionModel/previewData
 /AttentionModel/*.tar
 /BaselineModel/*.npy
+/Data
+/learned

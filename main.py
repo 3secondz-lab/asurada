@@ -27,10 +27,10 @@ DATA_PATH = os.path.dirname(os.path.abspath(__file__))
     * You can use the functions of GraphUtils to visualize data.
         - AnimatedPlots
 '''
-datafiles_tr = ['std_001.csv']
+datafiles_tr = ['./Data/std_001.csv']
 df_tr = files2df(DATA_PATH, datafiles_tr)
 
-datafiles_te = ['std_002.csv']
+datafiles_te = ['./Data/std_002.csv']
 df_te = files2df(DATA_PATH, datafiles_te)
 
 
@@ -60,7 +60,7 @@ if try1:
     # carSpeed = df_te['GPS_Speed'].values
     agent = Agent(df_tr, 'tr-01-01', previewHelper_tr, previewType,\
                                     100, 100, 64, 30, 0.2, 64, \
-                    use_throttle=True, use_steer_spd=True)
+                    use_throttle=False, use_steer_spd=False)
     # training
     input, output = agent.preprocess(df_tr)
     agent.update(input, output)

@@ -244,8 +244,8 @@ class Agent:
         return np.array(predicts), np.array(true_vals), curvatures, len(predicts)
 
     def save(self, filename):
-        torch.save(self.predictor.state_dict(), '{}.pth'.format(filename))
+        torch.save(self.predictor.state_dict(), './learned/{}.pth'.format(filename))
 
     def load(self, filename):
         # torch.load_state_dict(self.predictor.state_dict(), '{}.pth'.format(filename))
-        self.predictor.load_state_dict(torch.load("learned/{}.pth".format(filename)))
+        self.predictor.load_state_dict(torch.load("./learned/{}.pth".format(filename)))
