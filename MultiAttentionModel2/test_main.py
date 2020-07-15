@@ -2,8 +2,6 @@ import pdb
 from test_data import *
 from test_model import *
 
-import test_data2
-
 import numpy as np
 import matplotlib.pyplot as plt
 
