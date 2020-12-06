@@ -147,7 +147,7 @@ class DecoderWithAttention(nn.Module):
         alphas = torch.zeros(batch_size, decodeLength, numSubCurvatures).to(device)
         alphas_target = torch.zeros(batch_size, decodeLength, numSubCurvatures).to(device)  # predicted position
 
-        if inferenceMode:  # 이때는 항상 curSpeeds.dim()이 1이다.
+        if inferenceMode:  # 이때는 항상 curSpeeds.dim()이 1이다. Not Used.
             histLen = histSpeeds.size(1) - prepHistLen
 
             for t in range(prepHistLen):

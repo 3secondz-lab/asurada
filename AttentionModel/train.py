@@ -6,7 +6,7 @@ import torch.utils.data
 from torch import nn
 from torch.utils.tensorboard import SummaryWriter
 
-from model import Encoder, DecoderWithAttention
+from model import Encoder, DecoderWithAttention  # model_G_LA_TS
 
 from dataset import Dataset
 from constants import device, hiddenDimension
@@ -23,27 +23,23 @@ from random import random
 driver = 'YJ'  # mugello, spa, imola, magione, YYF
 # driver = 'YS'  # mugello, spa, imola, magione, monza
 
-vNumber = 1  # YJ, TEST:SPA
-# vNumber = 2  # YJ, TEST:IMOLA
-# vNumber = 3  # YJ, TEST:MAGIONE
-# vNumber = 4  # YJ, TEST:MUGELLO
+vNumber = 1  # TEST:SPA
+# vNumber = 2  # TEST:IMOLA
+# vNumber = 3  # TEST:MAGIONE
+# vNumber = 4  # TEST:MUGELLO
 
-# vNumber = 5  # YS, TEST:SPA
-# vNumber = 6  # YS, TEST:IMOLA
-# vNumber = 7  # YS, TEST:MAGIONE
-# vNumber = 8  # YS, TEST:MUGELLO
-
-circuit_tr = ['mugello', 'magione', 'imola']  # vNumber: 1. 5
-circuit_vl = ['spa']
-
-# circuit_tr = ['mugello', 'magione', 'spa']  # vNumber: 2, 6
-# circuit_vl = ['imola']
-
-# circuit_tr = ['mugello', 'imola', 'spa']  #  vNumber: 3, 7
-# circuit_vl = ['magione']
-
-# circuit_tr = ['magione', 'imola', 'spa']  # vNumber: 4, 8
-# circuit_vl = ['mugello']
+if vNumber == 1:
+    circuit_tr = ['mugello', 'magione', 'imola']
+    circuit_vl = ['spa']
+elif vNumber == 2:
+    circuit_tr = ['mugello', 'magione', 'spa']
+    circuit_vl = ['imola']
+elif vNumber == 3:
+    circuit_tr = ['mugello', 'imola', 'spa']
+    circuit_vl = ['magione']
+elif vNumber == 4:
+    circuit_tr = ['magione', 'imola', 'spa']
+    circuit_vl = ['mugello']
 
 ''' Env. Parameters '''
 curvatureLength = 250  # unit [m]
@@ -70,7 +66,7 @@ epochs_since_improvement = 0
 best_loss_tr = 10e5
 grad_clip = 5.
 
-training_gt_rate = 0  # 0: 예측값으로만 학습
+training_gt_rate = 0.5  # 0: 예측값으로만 학습
 ''' ======================================================================== '''
 
 ''' System '''
@@ -213,7 +209,7 @@ def train(trainLoader, encoder, decoder, criterion, encoder_optimizer, decoder_o
 
         targets = targetAccelXs[:, :-1].unsqueeze(-1)
 
-        loss, metrics = criterion(predictions, targets, mean, std, alphas, alphas_target)  # 여기도 정리
+        loss, metrics = criterion(predictions, targets, mean, std, alphas, alphas_target)
         # metrics: MSE, vMSE, aMSE, consistencyVA
 
         stepIdx += 1

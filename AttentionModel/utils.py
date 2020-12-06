@@ -23,7 +23,7 @@ def station_curvature(localX, localY, medfilt=15):
     # Menger's curvature
     dx = np.diff(localX)
     dy = np.diff(localY)
-    l1 = np.sqrt(dx**2 + dy**2)          # 1-0 부터
+    l1 = np.sqrt(dx**2 + dy**2)                   # 1-0 부터
     l2 = l1[1:]  #np.sqrt(dx[1:]**2 + dy[1:]**2)  # 2-1 부터
 
     k1 = dx[:-1]/l1[:-1] + dx[1:]/l2
@@ -81,13 +81,13 @@ def replicateMapInfo(mapFile, df, vis=False, startX=None, startY=None):
         plt.show()
 
     df_map_dist = df_map['distance'].values
-    df_map = pd.concat([df_map]*(len(startingPoints)+1), ignore_index=True)  # curvature를 위해 넉넉히 +1
+    df_map = pd.concat([df_map]*(len(startingPoints)+1), ignore_index=True)  # curvature를 위해 +1
 
     dist = df_map_dist.tolist()
     last_dist_v = df_map_dist[-1]
     for i in range(len(startingPoints)):
         # print(i, dist[-1], print(df_map_dist + (last_dist_v+1)))
-        dist += (df_map_dist + (last_dist_v+1)).tolist()  # normalization을 했을 때는 1m로 걍 더하면 되는데, 안된 경우는 어떻게??
+        dist += (df_map_dist + (last_dist_v+1)).tolist()
         last_dist_v = dist[-1]
     dist = np.array(dist)
     df_map['distance'] = dist
@@ -110,28 +110,15 @@ def getMapPreview(i, df, df_map, map_center_xy, previewDistance, transform=False
         # cur_idx = np.argmin(eDist)  # local x, y도 반복되기 때문에, 다시 i에서 가까운 것으로 해야 함.
         cur_idx_candi = np.where(eDist == eDist.min())
         temp = (cur_idx_candi[0] - i)  # i를 뺀 값임. 왜냐하면, 맵을 빙글빙글 도니까, i 다음 번을 가져야 할거 같아서
-        # cur_idx = np.min(temp[temp>=0])  # i를 뺀 값을 그대로 index로 쓰면 엉뚱한 곳을 preview로 가져오게 됨...
+        # cur_idx = np.min(temp[temp>=0])  # i를 뺀 값을 그대로 index로 쓰면 엉뚱한 곳을 preview로 가져오게 됨.
         cur_idx = cur_idx_candi[0][np.where(temp>0)[0][0]]
         cur_dist = df_map['distance'][cur_idx]  # map의 시작을 0으로 했을 때, cur_xy까지의 거리
         preview_end_idx = np.argmin(abs(df_map['distance'].values - (cur_dist + previewDistance)))
     except:
-        # try:
-        #     cur_idx_candi = np.argsort(eDist)
-        #     temp = cur_idx_candi - i
-        #     cur_idx = cur_idx_candi[np.where(temp[:10]>0)[0][0]]  # 적어도 10개 안에는 있겠지..
-        #     cur_dist = df_map['distance'][cur_idx]
-        #     preview_end_idx = np.argmin(abs(df_map['distance'].values - (cur_dist + previewDistance)))
-        #     print('\ngetMapPreview: alternative')
-        #     pdb.set_trace()
-        # except:
-        #     pdb.set_trace()
         return [], [], [], []
 
-    # pdb.set_trace()
     map_preview = map_center_xy[cur_idx:preview_end_idx+1, :]  # 그림 그릴때 쓰는 함수니까. curvature[0]을 현재 위치로.
     dist, curvature = station_curvature(map_preview[:, 0], map_preview[:, 1], medfilt=15)
-    # dist, curvature = dh.station_curvature(map_preview[:, 0], map_preview[:, 1], medfilt=31)  # 1m로 normalization을 하면서, filter를 더 크게 잡아야 할듯, 나중에 찾고, 15로 일단 고
-    # # station_curvature(localX, localY) = station_curvature(transY, transX)
 
     if transform:
         transX, transY = transform_plane(map_preview[:, 0]-map_preview[0, 0],
