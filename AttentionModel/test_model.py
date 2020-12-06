@@ -1,6 +1,6 @@
 import pdb
 import torch
-from model_G_LA_TS import Encoder, DecoderWithAttention
+from model import Encoder, DecoderWithAttention
 import pickle
 
 from constants import device, hiddenDimension
