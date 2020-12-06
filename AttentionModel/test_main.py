@@ -31,7 +31,7 @@ vNumber = args.vNumber
 epoch = args.epoch
 
 # LapPoints: calculated by replicateMapInfo (@ utils.py)
-lapIdxs_yj = {'mugello': [0, 1656, 3229, 4734, 6244, 7757, 9305, 10868],  # 7
+lapIdxs_yj = {'mugello': [0, 1656, 3229, 4734, 6244, 7757, 9305, 10868],  # 7 laps
               'magione': [0, 1018, 1961, 2885, 3818, 4742, 5710, 6657, 7617, 8542, 9517],  # 10
               'imola': [0, 1550, 2981, 4429, 5859, 7261, 8679, 10114, 11527],  # 8
               'spa': [0, 2148, 4068, 6014, 7927, 9872, 11815, 13742, 15681, 17681]}  # 9

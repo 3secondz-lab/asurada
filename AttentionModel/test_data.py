@@ -65,6 +65,6 @@ class TestEnv:
 
                 histAccelX = tempDiff[:self.histLen]
                 curAccelX = tempDiff[self.histLen]
-                targetAccelXs = tempDiff[-self.targetLen-1:]  # v_t까지 알고 있는 상황에서 a_t부터 예측
+                targetAccelXs = tempDiff[-self.targetLen-1:]  # v_t까지 알고 있는 상황에서 a_t부터 예측, ^v_(t+1) = v_(t) + ^a_(t)
 
             yield curPosition, mapPreview, transMapPreview, dist, curvature, curSpeed, histSpeed, curAccelX, histAccelX, targetSpeeds, targetAccelXs
