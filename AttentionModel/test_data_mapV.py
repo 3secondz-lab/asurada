@@ -6,7 +6,6 @@ from helper import *
 from utils import *
 
 def getMapPreview_mapV(i, cur_xy, df_map, map_center_xy, previewDistance, transform=False, headingInfo=None):
-    # cur_xy = np.array([df.iloc[i]['PosLocalX'], df.iloc[i]['PosLocalY']])  # 곧장 받으면 됨.
     eDist = np.array([np.sqrt(sum((xy - cur_xy)**2)) for xy in map_center_xy])
 
     try:

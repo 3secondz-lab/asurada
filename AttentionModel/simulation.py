@@ -10,15 +10,15 @@ import argparse
 import scipy
 import os
 from tqdm import tqdm
-import time
 
-''' ex. python simulation.py -d YJ -v 1 -e 30 -c mugello '''
+''' ex. python simulation.py -d YJ -v 1 -e 30 -c spa '''
+''' ex. python simulation.py -d YJ -v 1 -e 30 -c YYF '''  # YYF: KIC
 
 ''' Setting Env. Parameters '''
 previewDistance = 250
 historyLength = 1  # unit [sec.], 차량의 현재 state를 정의할 때 사용되는 직전 과거 속도 프로파일
 
-initialSpeed = 0
+initialSpeed = 40
 histSpeeds_simul = [initialSpeed] * historyLength * 10
 curSpeed = initialSpeed
 
@@ -48,7 +48,7 @@ chpt_stat_path = '{}/stat_{}.pickle'.format(chptFolderPath, epoch)
 testModel = Model(chpt_enc_path, chpt_dec_path, chpt_stat_path)  # speed prediction에 사용할 model parameters
 
 ''' Load Circuit Map '''
-repeat = 3
+repeat = 1
 mapfile = '../Data/mapData/{}_norm.csv'.format(circuit)
 testEnv = TestEnv(cWindow=previewDistance, vpWindow=historyLength, mapfile=mapfile, repeat=repeat)
 testDataStream = testEnv.get_preview()
@@ -68,14 +68,17 @@ def getCurHeading(curPosition):
 def getNewPosition(curIdx, curPosition, curHeading, curSpeed_prev, curSpeed):
     # 현재 지점에서 현재 지점의 heading 추정 값(road centerline을 이용)과,
     # 현재 지점의 속도와 0.1초 후의 예측된 속도를 이용하여,
-    # 현재 지점에서 heading으로 0.1초동안 이동했을 때의 위치값을 계산
-    distance = (curSpeed_prev + 0.5*(curSpeed-curSpeed_prev))/36
+    # 현재 지점에서의 heading으로 0.1초동안 이동했을 때의 위치값을 계산
+    distance = (curSpeed_prev + 0.5*abs(curSpeed-curSpeed_prev))/36
     nextPosition = [curPosition[0] + distance*np.sin(curHeading),
-                    curPosition[1] + distance*np.cos(curHeading)]  # 여기 root하는게 맞지 않나?
+                    curPosition[1] + distance*np.cos(curHeading)]  # root?
 
-    eDist = np.array([np.sqrt(sum((xy - nextPosition)**2)) for xy in testEnv.map_center_xy[curIdx+1:curIdx+int(np.ceil(distance))+10]])
-    next_idx_candi = np.where(eDist == eDist.min())  # curIdx 근처에서 고르도록 하여, idx가 작아지는 것을 방지.
-    next_idx = next_idx_candi[0][0] + (curIdx+1)  # 0 -> curIdx+1이므로,
+    try:
+        eDist = np.array([np.sqrt(sum((xy - nextPosition)**2)) for xy in testEnv.map_center_xy[curIdx+1:curIdx+int(np.ceil(distance))+10]])
+        next_idx_candi = np.where(eDist == eDist.min())  # curIdx 근처에서 고르도록 하여, idx가 작아지는 것을 방지.
+        next_idx = next_idx_candi[0][0] + (curIdx+1)  # 0 -> curIdx+1이므로,
+    except:
+        pdb.set_trace()
 
     return next_idx, nextPosition
 
@@ -92,7 +95,7 @@ def main():
     total_preds = []
     total_alphas = []
 
-    data4CarSim = []  # carSim에서는 centerline 위 속도 프로파일이 필요하다 함. [[x,y,stationIdx,speed],]
+    data4CarSim = []  # carSim에서는 centerline 위에서 움직이는 속도 프로파일이 필요하다 함. [[x,y,stationIdx,speed],]
     curIdx = 0
 
     while curIdx < len(testEnv.df_map)*repeat:
@@ -154,22 +157,26 @@ def main():
     np.save('{}/data4CarSim'.format(resultPath), np.array(data4CarSim))
 
     data4CarSim = np.array(data4CarSim)
-    idx_candi = np.where(data4CarSim[:, -2]<10)[0]
-    print(idx_candi)
-    a = int(input('input a'))
-    b = int(input('input b'))
-    for i in range(repeat):  # 3만 지원.
-        if i == 0:
-            df = pd.DataFrame(data4CarSim[:a], columns=['center_x', 'center_y', 'stationIdx', 'speed'])
-        elif i == 1:
-            df = pd.DataFrame(data4CarSim[a:b], columns=['center_x', 'center_y', 'stationIdx', 'speed'])
-        elif i == 2:
-            df = pd.DataFrame(data4CarSim[b:], columns=['center_x', 'center_y', 'stationIdx', 'speed'])
-        df.to_csv('{}/data4CarSim_{}_{}.csv'.format(resultPath, driver, i))
+    if repeat == 1:
+        df = pd.DataFrame(data4CarSim, columns=['center_x', 'center_y', 'stationIdx', 'speed'])
+        df.to_csv('{}/data4CarSim_{}_{}.csv'.format(resultPath, driver, 0))
+    elif repeat <= 3:  # 2, 3
+        idx_candi = np.where(data4CarSim[:, -2]<10)[0]
+        print(idx_candi, len(data4CarSim))
+        a = int(input('input end index for first lap:'))
+        b = int(input('input end index for second lap (if repeat==2, input the last index):'))
+        for i in range(repeat):  # 최대 3바퀴까지 지원.
+            if i == 0:
+                df = pd.DataFrame(data4CarSim[:a], columns=['center_x', 'center_y', 'stationIdx', 'speed'])
+            elif i == 1:
+                df = pd.DataFrame(data4CarSim[a:b], columns=['center_x', 'center_y', 'stationIdx', 'speed'])
+            elif i == 2:
+                df = pd.DataFrame(data4CarSim[b:], columns=['center_x', 'center_y', 'stationIdx', 'speed'])
+            df.to_csv('{}/data4CarSim_{}_{}.csv'.format(resultPath, driver, i))
 
     for j in range(len(total_preds)):
         plt.plot(range(j, j+20), total_preds[j][:, 0], 'k.-', alpha=0.1)
-    plt.plot(np.array(total_preds)[:, 0, 0], 'r--')  # 0: 예측한 시각 index // 1: 매 예측에서 예측값의 index, [0]: ^v_(t+1) // 2: [0]: 속도, [1]: 가속도
+    plt.plot(np.array(total_preds)[:, 0, 0], 'r--')  # 0: 예측한 시각 index // 1: 매 예측에서 예측값의 index, [0]: ^v_(t+1) // 2: [0]: 속도
     plt.show()
 
 
